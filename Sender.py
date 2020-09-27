@@ -23,6 +23,7 @@ WINDOW_SIZE = 4
 
 # Need to have two threads: one for sending and another for receiving ACKs
 
+
 # Generate random payload of any length
 def generate_payload(length=10):
     letters = string.ascii_lowercase
@@ -31,28 +32,49 @@ def generate_payload(length=10):
     return result_str
 
 
+def read_payload():
+    print("read bio.txt")
+    return "data"
+
+
 # Send using Stop_n_wait protocol
 def send_snw(sock):
     # Fill out the code here
     seq = 0
+    clock = Timer(TIMEOUT_INTERVAL)
     while seq < 20:
         # read packet from bio
+        data = read_payload()
         # create packet from data
+        pkt = packet.make(seq, data)
+        # send packet
+        udt.send(pkt, sock, RECEIVER_ADDR)
+        seq += 512
         # start timer
+        clock.start()
         # wait to receive packet
+        while not clock.timeout():
+            pktR, addrR = udt.recv()
+            # check_corrupt(pktR), check_seq_num() continue
+            # if not corrupt, is ack and has proper sequence number break
+            # if timeout resend pkt and restart timer
         # if we receive packet and is not corrupt or is ack with improper sequence number stay in loop
         # if we timeout resend packet and start timer
         # if we receive a packet and it is not corrupt and it is an ack with proper sequence number we stop timer and continue
+        while not clock.timeout():
+            pktR, addrR = udt.recv()
+        continue
+        # wait to see if we receive another packet of data, if not repeat these steps starting from read packet
 
-        # if we receive a packet then we repeat previous steps starting at read packet from data
-        data = generate_payload(40).encode()
-        pkt = packet.make(seq, data)
-        print("Sending seq# ", seq, "\n")
-        udt.send(pkt, sock, RECEIVER_ADDR)
-        seq = seq+1
-        time.sleep(TIMEOUT_INTERVAL)
-    pkt = packet.make(seq, "END".encode())
-    udt.send(pkt, sock, RECEIVER_ADDR)
+
+    #     data = generate_payload(40).encode()
+    #     pkt = packet.make(seq, data)
+    #     print("Sending seq# ", seq, "\n")
+    #     udt.send(pkt, sock, RECEIVER_ADDR)
+    #     seq = seq+1
+    #     time.sleep(TIMEOUT_INTERVAL)
+    # pkt = packet.make(seq, "END".encode())
+    # udt.send(pkt, sock, RECEIVER_ADDR)
 
 # Send using GBN protocol
 def send_gbn(sock):

@@ -1,6 +1,7 @@
 # timer.py - A timer class
 import time
 
+
 class Timer(object):
     TIMER_STOP = -1
 
