@@ -6,6 +6,7 @@ import string
 import packet
 import udt
 import random
+import os
 from timer import Timer
 
 # Some already defined parameters
@@ -33,8 +34,16 @@ def generate_payload(length=10):
 
 
 def read_payload():
-    print("read bio.txt")
-    return "data"
+    file = "bio.txt"
+    size = os.path.getsize(file)
+    fp = open(file, 'rb')
+    bio = dict.fromkeys(range(size // PACKET_SIZE))
+    i = 0
+    for key in bio:
+        bio[key] = fp.read(PACKET_SIZE)
+        bio[(PACKET_SIZE*i)] = bio.pop(key)
+        i+= 1
+    return bio
 
 
 # Send using Stop_n_wait protocol
@@ -78,7 +87,34 @@ def send_snw(sock):
 
 # Send using GBN protocol
 def send_gbn(sock):
-
+    seq = 0
+    wseq = 0
+    window_start = 0
+    window_end = WINDOW_SIZE
+    clock = Timer(TIMEOUT_INTERVAL)
+    bio = read_payload()
+    while True:
+        for i in range(WINDOW_SIZE):                # sends window of data
+            pkt = packet.make(seq, bio[seq])
+            udt.send(pkt, sock, RECEIVER_ADDR)
+            seq += PACKET_SIZE
+        clock.start()
+        temp = wseq
+        while not clock.timeout():
+            ack, addr = udt.recv(sock)
+            rseq, data = packet.extract(ack)
+            if rseq == temp:
+                window_start += 1
+                temp += PACKET_SIZE
+            if temp == (window_end * PACKET_SIZE):
+                clock.stop()
+        if clock.timeout():
+            for i in range(WINDOW_SIZE):  # sends window of data
+                pkt = packet.make(seq, bio[seq])
+                udt.send(pkt, sock, RECEIVER_ADDR)
+                seq += PACKET_SIZE
+        else:
+            wseq = temp
     return
 
 # Receive thread for stop-n-wait

@@ -6,9 +6,27 @@ import udt
 
 RECEIVER_ADDR = ('localhost', 8080)
 
+
 # Receive packets from the sender w/ GBN protocol
 def receive_gbn(sock):
-    # Fill here
+    seq = 0
+    bio = None
+    while True:     # how to end while loop?
+        pkt, addr = udt.recv(sock)
+        try:
+            rseq, data = packet.extract(pkt)
+            if rseq == seq:
+                bio += data.decode()
+                seq += 512
+                ack = packet.make(seq)
+                udt.send(ack, sock, RECEIVER_ADDR)
+        except:
+            print("Corrupted packet")
+    return data
+
+    # wait for frame to arrive
+    # check if corrupted, do nothing if so
+    # if received packet is expected seq number then read data, compile, send ack
     return
 
 
