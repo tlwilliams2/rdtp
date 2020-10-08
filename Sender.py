@@ -1,6 +1,6 @@
 import socket
 import sys
-# import _thread
+import _thread
 import time
 import string
 import packet
@@ -18,9 +18,9 @@ TIMEOUT_INTERVAL = 0.5
 WINDOW_SIZE = 4
 
 # You can use some shared resources over the two threads
-# base = 0
-# mutex = _thread.allocate_lock()
-# timer = Timer(TIMEOUT_INTERVAL)
+base = 0
+mutex = _thread.allocate_lock()
+timer = Timer(TIMEOUT_INTERVAL)
 
 # Need to have two threads: one for sending and another for receiving ACKs
 
@@ -37,12 +37,16 @@ def read_payload():
     file = "bio.txt"
     size = os.path.getsize(file)
     fp = open(file, 'rb')
-    bio = dict.fromkeys(range(size // PACKET_SIZE))
+    temp = dict.fromkeys(range(size // PACKET_SIZE))
+    bio = dict()
     i = 0
-    for key in bio:
-        bio[key] = fp.read(PACKET_SIZE)
-        bio[(PACKET_SIZE*i)] = bio.pop(key)
-        i+= 1
+    largest = 0
+    for key in temp:
+        temp[key] = fp.read(PACKET_SIZE)
+        bio[(PACKET_SIZE*i)] = temp[key]
+        largest = PACKET_SIZE*i
+        i += 1
+    bio[(largest+PACKET_SIZE)] = -1
     return bio
 
 
@@ -87,34 +91,38 @@ def send_snw(sock):
 
 # Send using GBN protocol
 def send_gbn(sock):
+    global mutex
+    global timer
+    global base
+
     seq = 0
-    wseq = 0
-    window_start = 0
-    window_end = WINDOW_SIZE
-    clock = Timer(TIMEOUT_INTERVAL)
     bio = read_payload()
-    while True:
-        for i in range(WINDOW_SIZE):                # sends window of data
+    window = WINDOW_SIZE
+    _thread.start_new_thread(send_gbn, (sock, ))
+
+    while base < (len(bio) * PACKET_SIZE):
+        mutex.acquire()
+        for i in range(window):                # sends window of data
             pkt = packet.make(seq, bio[seq])
             udt.send(pkt, sock, RECEIVER_ADDR)
             seq += PACKET_SIZE
-        clock.start()
-        temp = wseq
-        while not clock.timeout():
-            ack, addr = udt.recv(sock)
-            rseq, data = packet.extract(ack)
-            if rseq == temp:
-                window_start += 1
-                temp += PACKET_SIZE
-            if temp == (window_end * PACKET_SIZE):
-                clock.stop()
-        if clock.timeout():
-            for i in range(WINDOW_SIZE):  # sends window of data
-                pkt = packet.make(seq, bio[seq])
-                udt.send(pkt, sock, RECEIVER_ADDR)
-                seq += PACKET_SIZE
+
+        if not timer.running():
+            timer.start()
+
+        while not timer.timeout() and timer.running():
+            mutex.release()
+            time.sleep(SLEEP_INTERVAL)
+            mutex.acquire()
+
+        if timer.timeout():
+            timer.stop()
         else:
-            wseq = temp
+            window = min(WINDOW_SIZE, (len(bio) - seq // 512))
+
+        mutex.release()
+    print("exit")
+    pkt = packet.make(-1)
     return
 
 # Receive thread for stop-n-wait
@@ -125,6 +133,16 @@ def receive_snw(sock, pkt):
 # Receive thread for GBN
 def receive_gbn(sock):
     # Fill here to handle acks
+    global mutex
+    global base
+
+    while True:
+        pkt, addr = udt.recv(sock)
+        ack, data = packet.extract(pkt)
+        if ack >= base:
+            mutex.acquire()
+            base = ack + 1
+            mutex.release()
     return
 
 
@@ -138,8 +156,8 @@ if __name__ == '__main__':
     sock.bind(SENDER_ADDR)
 
     # filename = sys.argv[1]
-
-    send_snw(sock)
+    print("starting sender gbn")
+    send_gbn(sock)
     sock.close()
 
 

@@ -1,4 +1,4 @@
-# receiver.py - The receiver in the reliable data transer protocol
+# receiver.py - The receiver in the reliable data transfer protocol
 import packet
 import socket
 import sys
@@ -10,16 +10,24 @@ RECEIVER_ADDR = ('localhost', 8080)
 # Receive packets from the sender w/ GBN protocol
 def receive_gbn(sock):
     seq = 0
-    bio = None
-    while True:     # how to end while loop?
-        pkt, addr = udt.recv(sock)
+    bio = ""
+    rseq = 0
+    while rseq != -1:     # how to end while loop?
+        pkt, sender = udt.recv(sock)
         try:
             rseq, data = packet.extract(pkt)
-            if rseq == seq:
+            print("rseq: %s\nseq: %s\n" % (rseq, seq))
+            if int(rseq) == int(seq):
+                print("hello")
                 bio += data.decode()
                 seq += 512
                 ack = packet.make(seq)
                 udt.send(ack, sock, RECEIVER_ADDR)
+                print("From: ", sender, ", Seq# ", seq)
+            elif int(rseq) > int(seq):
+                ack = packet.make(seq)
+                udt.send(ack, sock, RECEIVER_ADDR)
+                print("resent ack")
         except:
             print("Corrupted packet")
     return data
@@ -55,7 +63,9 @@ if __name__ == '__main__':
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.bind(RECEIVER_ADDR)
     # filename = sys.argv[1]
-    receive_snw(sock)
-
+    print("starting gbn receive")
+    data = receive_gbn(sock)
+    print(type(data))
+    print(data)
     # Close the socket
     sock.close()
