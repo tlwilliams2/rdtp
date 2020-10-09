@@ -8,9 +8,8 @@ RECEIVER_ADDR = ('localhost', 8080)
 
 
 # Receive packets from the sender w/ GBN protocol
-def receive_gbn(sock):
+def receive_gbn(sock, filename):
     # Open the file for writing
-    filename = "something.txt"
     try:
         file = open(filename, 'wb')
     except IOError:
@@ -58,14 +57,19 @@ def receive_snw(sock):
 
 # Main function
 if __name__ == '__main__':
-    # if len(sys.argv) != 2:
-    #     print('Expected filename as command line argument')
-    #     exit()
+    if len(sys.argv) != 3:
+        print("Expected filename and send protocol as command line argument")
+        exit()
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.bind(RECEIVER_ADDR)
-    # filename = sys.argv[1]
-    print("starting gbn receive")
-    receive_gbn(sock)
-    # Close the socket
+
+    filename = sys.argv[1]
+    protocol = sys.argv[2]
+    if protocol == "gbn":
+        print("starting receive gbn")
+        receive_gbn(sock, filename)
+    elif protocol == "snw":
+        print("starting receive gbn")
+        receive_snw(sock, filename)
     sock.close()

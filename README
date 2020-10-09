@@ -1,0 +1,13 @@
+To run the protocols, you must run two files: “Receiver.py” and “Sender.py”. Receiver.py must be run first.
+You can specify gbn or snw with the following commands (Any filename can be entered, file will be created in runtime):
+
+SNW Protocol: python3 Receiver.py <filename>.txt snw
+GBN Protocol: python3 Receiver.py <filename>.txt gbn
+
+Sender.py can now be ran. To run a specific protocol you must specify it in the arguments.
+The file to read from must also be specified. (The default setup file to read is “bio.txt”):
+
+SNW Protocol:		python3 Sender.py bio.txt snw
+GBN Protocol:		python3 Sender.py bio.txt gbn
+
+Lastly once output on Sender.py has stopped and the program states that all packets have been sent you must type “quit” and press enter to terminate the program.
