@@ -1,12 +1,10 @@
 import socket
-import sys
 import _thread
 import time
 import string
 import packet
 import udt
 import random
-import os
 from timer import Timer
 
 # Some already defined parameters
@@ -35,15 +33,11 @@ def generate_payload(length=10):
 
 def read_payload():
     file = "bio.txt"
-
-    # Open the file
     try:
         file = open(file, 'rb')
     except IOError:
         print("Cannot open %s" % file)
         return
-
-    # Add all the packets to the buffer
     packets = []
     seq = 0
     while True:
@@ -104,6 +98,7 @@ def send_gbn(sock):
     global base
     global timer
 
+    # get packets from file and set all necessary values
     packets = read_payload()
     num_packets = len(packets)
     print("Packets to be sent: %s" % num_packets)
@@ -117,6 +112,8 @@ def send_gbn(sock):
     _thread.start_new_thread(receive_gbn, (sock,))
 
     while base < num_packets:
+        # set mutex lock to this thread to execute send tasks
+        # send all packets in given window
         mutex.acquire()
         while next_to_send < window_start + window_size:
             print("Sending sequence #: %s" % next_to_send)
@@ -128,15 +125,15 @@ def send_gbn(sock):
             print("Starting window timer")
             timer.start()
 
-        # Wait until a timer goes off or we get an ACK
+        # Wait until a timer times out and pass mutex lock to receive thread
         while timer.running() and not timer.timeout():
             mutex.release()
             print("Waiting for acks")
             time.sleep(SLEEP_INTERVAL)
             mutex.acquire()
-
+        # if we time out or we have not received acks for all window packets
+        # then we reset window. Else we move the window
         if timer.timeout() or ((window_start + window_size) > base):
-            # Looks like we timed out
             print("Window timed out")
             timer.stop()
             next_to_send = window_start
@@ -147,8 +144,9 @@ def send_gbn(sock):
             window_size = get_window_size(num_packets)
         mutex.release()
 
-    # Send empty packet as sentinel
+    # Send sentinel packet
     udt.send(packet.make_empty(), sock, RECEIVER_ADDR)
+    print("finished sending all packets")
 
 
 # Receive thread for stop-n-wait
@@ -163,14 +161,15 @@ def receive_gbn(sock):
     global timer
 
     while True:
+        # receive ACKs then extract them
         pkt, addr = udt.recv(sock)
         ack, data = packet.extract(pkt)
 
         print("Received ack: %s" % ack)
-        if ack >= base:
-            mutex.acquire()
-            base = ack + 1
-            print("Updated next sequence #: %s" % base)
+        if ack >= base:                                 # check if ack is expected ack seq #
+            mutex.acquire()                             # lock this thread
+            base = ack + 1                              # increment base seq
+            print("Updated next sequence #: %s" % base) # update next base seq #
             timer.stop()
             mutex.release()
 
