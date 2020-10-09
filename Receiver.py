@@ -9,7 +9,7 @@ RECEIVER_ADDR = ('localhost', 8080)
 
 # Receive packets from the sender w/ GBN protocol
 def receive_gbn(sock, filename):
-    # Open the file for writing
+    # try to pen file for writing else throw error
     try:
         file = open(filename, 'wb')
     except IOError:
@@ -18,20 +18,20 @@ def receive_gbn(sock, filename):
 
     expected_seq = 0
     while True:
-        pkt, addr = udt.recv(sock)
+        pkt, addr = udt.recv(sock)                  # receive packet and check if it's valid
         if not pkt:
             break
-        seq, data = packet.extract(pkt)
+        seq, data = packet.extract(pkt)             # extract packet sequence number
         print("Received packet: %s" % seq)
 
-        if seq == expected_seq:
+        if seq == expected_seq:                     # if received sequence # is the expected sequence # send ACKs
             print("Received expected packet\nSending ACK: %s" % seq)
             pkt = packet.make(seq)
             udt.send(pkt, sock, addr)
-            expected_seq += 1
+            expected_seq += 1                       # increment next expected sequence # and write data to file
             print("Writing data to file")
             file.write(data)
-        else:
+        else:                                       # if not expected sequence # then send ACK for most recent ingested packet
             print("Sending ACK for latest packet: %s" % (expected_seq - 1))
             pkt = packet.make(expected_seq - 1)
             udt.send(pkt, sock, addr)
