@@ -3,8 +3,6 @@
 # Creates a packet from a sequence number and byte data
 def make(seq_num, data = b''):
     seq_bytes = seq_num.to_bytes(4, byteorder = 'little', signed = True)
-    print(type(seq_bytes))
-    print(type(data))
     return seq_bytes + data
 
 # Creates an empty packet

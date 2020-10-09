@@ -35,19 +35,24 @@ def generate_payload(length=10):
 
 def read_payload():
     file = "bio.txt"
-    size = os.path.getsize(file)
-    fp = open(file, 'rb')
-    temp = dict.fromkeys(range(size // PACKET_SIZE))
-    bio = dict()
-    i = 0
-    largest = 0
-    for key in temp:
-        temp[key] = fp.read(PACKET_SIZE)
-        bio[(PACKET_SIZE*i)] = temp[key]
-        largest = PACKET_SIZE*i
-        i += 1
-    bio[(largest+PACKET_SIZE)] = -1
-    return bio
+
+    # Open the file
+    try:
+        file = open(file, 'rb')
+    except IOError:
+        print("Cannot open %s" % file)
+        return
+
+    # Add all the packets to the buffer
+    packets = []
+    seq = 0
+    while True:
+        data = file.read(PACKET_SIZE)
+        if not data:
+            break
+        packets.append(packet.make(seq, data))
+        seq += 1
+    return packets
 
 
 # Send using Stop_n_wait protocol
@@ -89,41 +94,62 @@ def send_snw(sock):
     # pkt = packet.make(seq, "END".encode())
     # udt.send(pkt, sock, RECEIVER_ADDR)
 
+def get_window_size(num_packets):
+    global base
+    return min(WINDOW_SIZE, num_packets - base)
+
 # Send using GBN protocol
 def send_gbn(sock):
     global mutex
-    global timer
     global base
+    global timer
 
-    seq = 0
-    bio = read_payload()
-    window = WINDOW_SIZE
-    _thread.start_new_thread(send_gbn, (sock, ))
+    packets = read_payload()
+    num_packets = len(packets)
+    print("Packets to be sent: %s" % num_packets)
+    window_size = get_window_size(num_packets)
+    window_start = 0
+    next_to_send = 0
+    base = 0
 
-    while base < (len(bio) * PACKET_SIZE):
+    # Start the receiver thread
+    print("Starting gbn receive thread")
+    _thread.start_new_thread(receive_gbn, (sock,))
+
+    while base < num_packets:
         mutex.acquire()
-        for i in range(window):                # sends window of data
-            pkt = packet.make(seq, bio[seq])
-            udt.send(pkt, sock, RECEIVER_ADDR)
-            seq += PACKET_SIZE
+        while next_to_send < window_start + window_size:
+            print("Sending sequence #: %s" % next_to_send)
+            udt.send(packets[next_to_send], sock, RECEIVER_ADDR)
+            next_to_send += 1
 
+        # Start the timer
         if not timer.running():
+            print("Starting window timer")
             timer.start()
 
-        while not timer.timeout() and timer.running():
+        # Wait until a timer goes off or we get an ACK
+        while timer.running() and not timer.timeout():
             mutex.release()
+            print("Waiting for acks")
             time.sleep(SLEEP_INTERVAL)
             mutex.acquire()
 
-        if timer.timeout():
+        if timer.timeout() or ((window_start + window_size) > base):
+            # Looks like we timed out
+            print("Window timed out")
             timer.stop()
+            next_to_send = window_start
         else:
-            window = min(WINDOW_SIZE, (len(bio) - seq // 512))
-
+            next_to_send = base
+            window_start = base
+            print("Moving window")
+            window_size = get_window_size(num_packets)
         mutex.release()
-    print("exit")
-    pkt = packet.make(-1)
-    return
+
+    # Send empty packet as sentinel
+    udt.send(packet.make_empty(), sock, RECEIVER_ADDR)
+
 
 # Receive thread for stop-n-wait
 def receive_snw(sock, pkt):
@@ -132,18 +158,21 @@ def receive_snw(sock, pkt):
 
 # Receive thread for GBN
 def receive_gbn(sock):
-    # Fill here to handle acks
     global mutex
     global base
+    global timer
 
     while True:
         pkt, addr = udt.recv(sock)
         ack, data = packet.extract(pkt)
+
+        print("Received ack: %s" % ack)
         if ack >= base:
             mutex.acquire()
             base = ack + 1
+            print("Updated next sequence #: %s" % base)
+            timer.stop()
             mutex.release()
-    return
 
 
 # Main function
@@ -157,7 +186,9 @@ if __name__ == '__main__':
 
     # filename = sys.argv[1]
     print("starting sender gbn")
-    send_gbn(sock)
+    print("Starting gbn send thread")
+    _thread.start_new_thread(send_gbn, (sock, ))
+    exit_program = input("Enter \"quit\" to exit program")
     sock.close()
 
 

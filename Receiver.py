@@ -9,33 +9,35 @@ RECEIVER_ADDR = ('localhost', 8080)
 
 # Receive packets from the sender w/ GBN protocol
 def receive_gbn(sock):
-    seq = 0
-    bio = ""
-    rseq = 0
-    while rseq != -1:     # how to end while loop?
-        pkt, sender = udt.recv(sock)
-        try:
-            rseq, data = packet.extract(pkt)
-            print("rseq: %s\nseq: %s\n" % (rseq, seq))
-            if int(rseq) == int(seq):
-                print("hello")
-                bio += data.decode()
-                seq += 512
-                ack = packet.make(seq)
-                udt.send(ack, sock, RECEIVER_ADDR)
-                print("From: ", sender, ", Seq# ", seq)
-            elif int(rseq) > int(seq):
-                ack = packet.make(seq)
-                udt.send(ack, sock, RECEIVER_ADDR)
-                print("resent ack")
-        except:
-            print("Corrupted packet")
-    return data
+    # Open the file for writing
+    filename = "something.txt"
+    try:
+        file = open(filename, 'wb')
+    except IOError:
+        print("Cannot open %s" % filename)
+        return
 
-    # wait for frame to arrive
-    # check if corrupted, do nothing if so
-    # if received packet is expected seq number then read data, compile, send ack
-    return
+    expected_seq = 0
+    while True:
+        pkt, addr = udt.recv(sock)
+        if not pkt:
+            break
+        seq, data = packet.extract(pkt)
+        print("Received packet: %s" % seq)
+
+        if seq == expected_seq:
+            print("Received expected packet\nSending ACK: %s" % seq)
+            pkt = packet.make(seq)
+            udt.send(pkt, sock, addr)
+            expected_seq += 1
+            print("Writing data to file")
+            file.write(data)
+        else:
+            print("Sending ACK for latest packet: %s" % (expected_seq - 1))
+            pkt = packet.make(expected_seq - 1)
+            udt.send(pkt, sock, addr)
+
+    file.close()
 
 
 # Receive packets from the sender w/ SR protocol
@@ -64,8 +66,6 @@ if __name__ == '__main__':
     sock.bind(RECEIVER_ADDR)
     # filename = sys.argv[1]
     print("starting gbn receive")
-    data = receive_gbn(sock)
-    print(type(data))
-    print(data)
+    receive_gbn(sock)
     # Close the socket
     sock.close()
