@@ -3,6 +3,7 @@ import packet
 import socket
 import sys
 import udt
+from timer import Timer
 
 RECEIVER_ADDR = ('localhost', 8080)
 
@@ -17,7 +18,9 @@ def receive_gbn(sock, filename):
         return
 
     expected_seq = 0
-    while True:
+    clock = Timer(1)
+    clock.start()
+    while not clock.timeout():                      # while we do not timeout run receive protocol
         pkt, addr = udt.recv(sock)                  # receive packet and check if it's valid
         if not pkt:                                 # if we receive a sentinel packet break receive
             break
@@ -25,16 +28,20 @@ def receive_gbn(sock, filename):
         print("Received packet: %s" % seq)
 
         if seq == expected_seq:                     # if received sequence # is the expected sequence # send ACKs
+            clock.stop()
             print("Received expected packet\nSending ACK: %s" % seq)
             pkt = packet.make(seq)
             udt.send(pkt, sock, addr)
             expected_seq += 1                       # increment next expected sequence # and write data to file
             print("Writing data to file")
             file.write(data)
+            clock.start()
         else:                                       # if not expected sequence # then send ACK for most recent ingested packet
+            clock.stop()
             print("Sending ACK for latest packet: %s" % (expected_seq - 1))
             pkt = packet.make(expected_seq - 1)
             udt.send(pkt, sock, addr)
+            clock.start()
 
     file.close()
 
