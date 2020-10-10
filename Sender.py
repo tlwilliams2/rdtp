@@ -5,6 +5,7 @@ import time
 import packet
 import udt
 from timer import Timer
+from threading import Thread, Event
 
 # Some already defined parameters
 PACKET_SIZE = 512
@@ -40,8 +41,39 @@ def read_payload(file):
 
 
 # Send using Stop_n_wait protocol
+
+seq = 0
+#To stop snw_receiver thread after timeout.
+stop_event = Event()
 def send_snw(sock):
-    print("starting snw thread")
+    # open file to be read.
+    file = open("bio.txt","r",encoding="utf-8")
+    #The end of file, nothing else to read.
+    while(file.tell()!=3460):
+        ack = seq
+        #Read bytes from file as determines by PACKET_SIZE
+        data = file.read(PACKET_SIZE) 
+        
+        data = data.encode()
+        pkt = packet.make(seq, data)
+        print("Sending seq# ", seq, "\n")
+        
+        #Loop through sending attempts until sequence as been updated
+        #signaling packet has been properly sent and ack received.
+        while(ack==seq):
+        
+            udt.send(pkt, sock, RECEIVER_ADDR)
+            #Start thread for receiver_snw.
+            snwThread = Thread(target = receive_snw, args=(sock, pkt))
+            snwThread.start()
+            #Timeout for receiver_snw thread to complete then continue down path.
+            snwThread.join(timeout = .5)
+            #Set stop event so receive_snw stops after timeout.
+            stop_event.set()
+    
+    #Sends end of file flag to Receiver socket signaling file has been fully read.
+    pkt = packet.make(seq, "END".encode())
+    udt.send(pkt, sock, RECEIVER_ADDR)
 
 
 def get_window_size(num_packets):
@@ -108,8 +140,31 @@ def send_gbn(sock, packets):
 
 # Receive thread for stop-n-wait
 def receive_snw(sock, pkt):
-    # Fill here to handle ACKs
-    return
+
+    endStr = ''
+    
+    global seq
+
+    while endStr!='END':  
+        pkt, senderaddr = udt.recv(sock)
+        rSeq, data = packet.extract(pkt)
+        
+        #if received sequence from Receiver socket match sequence from this
+        #Sender then alternate seq from 0 or 1 and break out while loop.        
+        if(rSeq==seq):
+            if(seq==0):
+                seq = 1
+            else:
+                seq = 0
+            break
+        #Otherwise wrong sequence was received, resend correct sequence and data.
+        else:
+            print("Mismatched acks, resending")
+            udt.send(pkt, sock, RECEIVER_ADDR)
+            
+        #Condition to check if timeout has been reach to end loop.
+        if stop_event.is_set():
+            break
 
 
 # Receive thread for GBN
