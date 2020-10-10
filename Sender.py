@@ -100,9 +100,10 @@ def send_gbn(sock, packets):
             window_size = get_window_size(num_packets)
         mutex.release()
 
-    # Send sentinel packet
+    # Send sentinel packets
     udt.send(packet.make_empty(), sock, RECEIVER_ADDR)
-    print("finished sending all packets")
+    print("All packets have been sent")
+
 
 
 # Receive thread for stop-n-wait

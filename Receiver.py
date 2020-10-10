@@ -19,7 +19,7 @@ def receive_gbn(sock, filename):
     expected_seq = 0
     while True:
         pkt, addr = udt.recv(sock)                  # receive packet and check if it's valid
-        if not pkt:
+        if not pkt:                                 # if we receive a sentinel packet break receive
             break
         seq, data = packet.extract(pkt)             # extract packet sequence number
         print("Received packet: %s" % seq)
